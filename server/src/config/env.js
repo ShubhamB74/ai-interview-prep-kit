@@ -8,8 +8,10 @@ dotenv.config({ path: path.join(root, '.env') });
 const num = (v, d) => (v === undefined || v === '' ? d : Number(v));
 const bool = (v, d) => (v === undefined || v === '' ? d : v === 'true');
 
+const nodeEnv = process.env.NODE_ENV || 'development';
+
 export const env = {
-  nodeEnv: process.env.NODE_ENV || 'development',
+  nodeEnv,
   port: num(process.env.PORT, 4000),
   mongoUri: process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/prepkit',
   sessionSecret: process.env.SESSION_SECRET || 'dev-only-secret',
@@ -25,7 +27,13 @@ export const env = {
   crawl: {
     maxPages: num(process.env.CRAWL_MAX_PAGES, 8),
     delayMs: num(process.env.CRAWL_DELAY_MS, 1000),
-    blockPrivate: bool(process.env.BLOCK_PRIVATE_ADDRESSES, true),
+    timeoutMs: num(process.env.CRAWL_TIMEOUT_MS, 8000),
+    maxBytes: num(process.env.CRAWL_MAX_BYTES, 1_500_000),
+    retries: num(process.env.CRAWL_RETRIES, 2),
+    // Private/loopback addresses are rejected in production. Outside production they are allowed
+    // so `npm run evaluate` can crawl company sites served from localhost.
+    blockPrivate: bool(process.env.BLOCK_PRIVATE_ADDRESSES, nodeEnv === 'production'),
+    discussionEnabled: bool(process.env.DISCUSSION_ENABLED, true),
   },
 };
 
