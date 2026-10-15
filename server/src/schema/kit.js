@@ -47,6 +47,22 @@ export const ScheduleDay = z.object({
   minutes: z.number().int().min(0), // integer minutes, never floats
 });
 
+// OPTIONAL EXTENSION: what research found and what it could not. Lets a kit say "thin" / "not found" honestly.
+export const ResearchNotes = z.object({
+  gaps: z.array(z.string()),
+  hiring_page: z.string().nullable(),
+  hiring_process: z.object({
+    known: z.boolean(),
+    confidence: z.enum(['published', 'reported', 'none']),
+    signals: z.record(z.boolean()),
+  }),
+  discussion_searched: z.boolean(),
+  discussion_found: z.boolean(),
+  discussion_sources: z.array(z.string()),
+  skipped_sources: z.array(z.object({ url: z.string().optional(), code: z.string(), reason: z.string() })),
+  thin_description: z.boolean(),
+});
+
 export const KitSchema = z.object({
   source: z.object({
     company: z.string(),
@@ -78,6 +94,7 @@ export const KitSchema = z.object({
     uncovered_requirement_ids: z.array(z.string()),
     passes: z.number().int().min(0),
   }),
+  research: ResearchNotes.optional(),
 });
 
 const dupes = (ids) => ids.filter((id, i) => ids.indexOf(id) !== i);

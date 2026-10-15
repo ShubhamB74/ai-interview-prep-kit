@@ -10,7 +10,7 @@ Short ADR-style notes. These feed the README sections the brief requires.
 | 4 | Node built-in test runner | No test deps; fast | decided |
 | 5 | Deterministic: `allocateSchedule`, `checkCoverage` | Brief: must not be handed to the model | decided |
 | 6 | Edit-state: `origin` (generated/edited/user) + `pinned` on questions/flashcards | Regeneration replaces only `generated && !pinned` items in the target section | proposed (Phase 6) |
-| 7 | LLM provider + model | TBD, pick in Phase 3 after checking current free-tier TPM limits | open |
+| 7 | LLM: one OpenAI-compatible client, presets for Gemini (default, `gemini-2.5-flash`) and Groq (`openai/gpt-oss-120b`) | Groq free tier is ~8k tokens/min per model, which makes "5 cases in 15 min" tight; Gemini's free token budget is far larger but ~10 requests/min. Both supported so a reviewer can use whichever key they have | decided |
 | 8 | Practice ordering: confidence-weighted sort vs SM-2 | TBD in Phase 7 | open |
 | 9 | Coverage loop: max passes + stop rule | TBD in Phase 4 | open |
 | 10 | Public discussion source | TBD in Phase 2 (must respect ToS/robots) | open |
@@ -28,4 +28,12 @@ Short ADR-style notes. These feed the README sections the brief requires.
 | 22 | Crawl scope: same registrable domain (subdomains ok); localhost/IP hosts are confined to the start path prefix | Handbooks live on subdomains; local fixtures serve several companies from one host | decided |
 | 23 | Public discussion = Hacker News Algolia API only (no Reddit/Glassdoor) | Official public API, no scraping; those sites restrict automated access. Precision filter: must name the company AND mention interviewing | decided |
 | 24 | Unreachable company site is NOT a failed case; `researchCompany` returns `gaps[]` and the kit says so | Brief: "unreachable sites are recorded rather than fatal"; failed is reserved for no kit at all | decided (confirm in Phase 5) |
+| 25 | LLM client owns: sliding-window token + request budget, retry/backoff honouring provider hints, quota-exhausted fast-fail, JSON extraction, schema validation, ONE repair call, truncation retry with more `max_tokens`, drop-unsupported-param fallback | Section 10 "invalid JSON", "rate-limits or briefly fails"; every step goes through one entry point (`completeJson`) | decided |
+| 26 | The model proposes, code decides: ids assigned by code; a requirement is kept only if its quoted evidence is found in the posting; explicit wording ("Bonus:", "Nice to have" heading, "required") overrides the model's priority | Extraction is 20 of 55 automated points and "nothing invented" is part of it | decided |
+| 27 | Category plan is deterministic (`planCategories`); each category has its OWN system prompt; hiring-process signals (regex over fetched text) and seniority change which categories exist | Brief: technical vs behavioural must not share a call; a published take-home + system design round must produce a different kit | decided |
+| 28 | Model may only cite requirement ids it was given; unknown ids removed, a question left with none is dropped (never re-attached) | Keeps coverage checkable rather than a matter of opinion | decided |
+| 29 | Untrusted text (JD, pages, forum snippets, even requirement text) is only ever sent inside `<<<UNTRUSTED label id>>>` blocks with a random id; lookalike delimiters defused; system prompt says never to follow instructions inside | Section 11 | decided |
+| 30 | Company brief makes NO model call when there are no usable pages; cited sources must be a subset of pages supplied | "Honest brief rather than a fabricated one" | decided |
+| 31 | Only requirement extraction is fatal in the draft; brief/category/flashcard failures are recorded in `failures` and the draft continues | Lets Phase 4's coverage loop retry gaps; `failed` is reserved for no kit at all | decided |
+| 32 | Kit extension: optional `research` block (gaps, hiring page, discussion sources, skipped sources, thin_description) | Lets a thin or poorly-researched kit say so inside the kit itself | decided |
 
