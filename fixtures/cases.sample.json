@@ -1,0 +1,5 @@
+[
+  { "id": "case-01", "jd": "Senior Backend Engineer\n\nRequired: 5+ years Node.js. Experience with PostgreSQL. Bonus: Kubernetes. You will mentor junior engineers.", "company_url": "https://posthog.com", "days": 5 },
+  { "id": "case-02-thin", "jd": "Backend dev wanted.\nApply now.", "company_url": "https://example.com", "days": 1 },
+  { "id": "case-03-unreachable", "jd": "Frontend Engineer. Required: React.", "company_url": "http://localhost:1/nope", "days": 60 }
+]
