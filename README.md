@@ -4,16 +4,16 @@ Paste a job description + company URL + days until interview. The app researches
 then generates a company brief, role breakdown, question bank, flashcards, and a day-by-day schedule
 you can edit and practise against.
 
-> Status: **Phase 0 scaffold.** Contracts (kit schema, batch CLI) are real; pipeline steps are stubs.
+> Status: **Phase 1 done** (auth + kit CRUD). Contracts (kit schema, batch CLI) are real; pipeline steps are still stubs.
 
 ## Quick start
 
 ```bash
 npm install
 cp .env.example .env        # fill in LLM_API_KEY etc.
-npm test                    # schema tests
+npm test                    # schema + API tests (no Mongo needed)
 npm run evaluate -- --input fixtures/cases.sample.json --output kits.json
-npm run dev:server          # API on :4000
+npm run dev:server          # API on :4000 (needs MongoDB running at MONGODB_URI)
 npm run dev:web             # UI on :3000
 ```
 
@@ -37,8 +37,8 @@ docs/         DECISIONS.md
 
 | Phase | Scope | Brief sections |
 |-------|-------|----------------|
-| 0 | Scaffold, schema, evaluate CLI shell, tests harness | 5, 9 |
-| 1 | Auth, sessions, Kit model, CRUD with ownership checks | 1, 13 |
+| 0 ✅ | Scaffold, schema, evaluate CLI shell, tests harness | 5, 9 |
+| 1 ✅ | Auth, sessions, Kit model, CRUD with ownership checks | 1, 13 |
 | 2 | Retrieval: safe fetch, robots.txt, rate limit/backoff, link ranking crawler, public discussion | 2, 11 |
 | 3 | LLM client (TPM budget, retries, JSON repair), requirement extraction, brief, per-category question generation | 3, 10 |
 | 4 | Deterministic scheduler + coverage check + second-pass loop, real tests | 4, 8 |

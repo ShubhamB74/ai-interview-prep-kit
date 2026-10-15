@@ -13,6 +13,7 @@ export async function api(path, { method = 'GET', body } = {}) {
     const err = new Error(data?.error?.message || `Request failed (${res.status})`);
     err.code = data?.error?.code;
     err.status = res.status;
+    err.details = data?.error?.details;
     throw err;
   }
   return data;

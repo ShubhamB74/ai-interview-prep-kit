@@ -13,6 +13,7 @@ export const env = {
   port: num(process.env.PORT, 4000),
   mongoUri: process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/prepkit',
   sessionSecret: process.env.SESSION_SECRET || 'dev-only-secret',
+  sessionTtlDays: num(process.env.SESSION_TTL_DAYS, 7),
   webOrigin: process.env.WEB_ORIGIN || 'http://localhost:3000',
   llm: {
     provider: process.env.LLM_PROVIDER || 'groq',
@@ -27,3 +28,7 @@ export const env = {
     blockPrivate: bool(process.env.BLOCK_PRIVATE_ADDRESSES, true),
   },
 };
+
+if (env.nodeEnv === 'production' && env.sessionSecret === 'dev-only-secret') {
+  throw new Error('SESSION_SECRET must be set in production.');
+}
