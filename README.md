@@ -4,7 +4,7 @@ Paste a job description + company URL + days until interview. The app researches
 then generates a company brief, role breakdown, question bank, flashcards, and a day-by-day schedule
 you can edit and practise against.
 
-> Status: **Phase 2 done** (retrieval; Phase 1 auth + kit CRUD before it). Contracts (kit schema, batch CLI) are real; pipeline steps are still stubs.
+> Status: **Phase 3 done** (LLM client, extraction, brief, questions, flashcards). Phases 1-2: auth, CRUD, retrieval. Contracts (kit schema, batch CLI) are real; pipeline steps are still stubs.
 
 ## Quick start
 
@@ -14,6 +14,7 @@ cp .env.example .env        # fill in LLM_API_KEY etc.
 npm test                    # schema + API tests (no Mongo needed)
 npm run evaluate -- --input fixtures/cases.sample.json --output kits.json
 npm run research -- https://example.com   # try retrieval on a real site
+npm run draft -- jd.txt https://example.com  # extraction -> research -> brief -> questions -> flashcards (needs LLM_API_KEY)
 npm run dev:server          # API on :4000 (needs MongoDB running at MONGODB_URI)
 npm run dev:web             # UI on :3000
 ```
@@ -41,7 +42,7 @@ docs/         DECISIONS.md
 | 0 ✅ | Scaffold, schema, evaluate CLI shell, tests harness | 5, 9 |
 | 1 ✅ | Auth, sessions, Kit model, CRUD with ownership checks | 1, 13 |
 | 2 ✅ | Retrieval: safe fetch, robots.txt, rate limit/backoff, link ranking crawler, public discussion | 2, 11 |
-| 3 | LLM client (TPM budget, retries, JSON repair), requirement extraction, brief, per-category question generation | 3, 10 |
+| 3 ✅ | LLM client (TPM budget, retries, JSON repair), requirement extraction, brief, per-category question generation | 3, 10 |
 | 4 | Deterministic scheduler + coverage check + second-pass loop, real tests | 4, 8 |
 | 5 | Async generation jobs: progress events, idempotency/dedupe, partial failure; harden evaluate (5 cases < 15 min) | 9, 13 |
 | 6 | Builder UI: edit/reorder/move/add/delete, regenerate-without-clobber (origin/pinned) | 6, 12 |
@@ -71,4 +72,24 @@ language what could not be found, so the brief can say so instead of inventing.
 link-local or metadata address (production); re-validation on every redirect; content-type allow-list; 1.5 MB cap;
 scripts, styles, nav and hidden elements stripped from fetched text. Fetched text is data only: Phase 3 passes it to
 the model in delimited, untrusted blocks.
+
+## LLM and generation (Phase 3)
+
+**Provider:** any OpenAI-compatible chat endpoint. Presets: Gemini (`gemini-2.5-flash`, default) and Groq
+(`openai/gpt-oss-120b`); set `LLM_PROVIDER` and `LLM_API_KEY`. Free-tier limits are per model and change, so the
+request/token limits are configurable. Groq's free tier is tight on tokens per minute (~8k), so prompts are compact,
+requirements are chunked (5 per call) and the client budgets tokens over a sliding minute instead of reacting to 429s.
+
+**Draft sequence** (`pipeline/draft.js`; each step reacts to the one before):
+1. `extractRequirements` (model proposes, code verifies: ids, evidence-in-posting, explicit priority wording)
+2. `researchCompany` (crawl + discussion, Phase 2)
+3. `analyzeHiringProcess` (deterministic signals: take-home, system design, ... "published" vs "reported")
+4. `buildCompanyBrief` (grounded in crawled pages only; no model call when there are none)
+5. `planCategories` (deterministic) then `generateQuestions` once per category, each with its own instructions
+6. `generateFlashcards`
+
+Phase 4 adds the coverage loop and the schedule (both deterministic) and assembles the final kit.
+
+**Honesty rules:** a stub posting yields few or no requirements and `thin: true`, never padding; an unreachable site
+yields an explicit "nothing retrieved" brief; "no published process" is stated in the prompt so the model does not assume one.
 
