@@ -4,7 +4,7 @@ Paste a job description + company URL + days until interview. The app researches
 then generates a company brief, role breakdown, question bank, flashcards, and a day-by-day schedule
 you can edit and practise against.
 
-> Status: **Phase 3 done** (LLM client, extraction, brief, questions, flashcards). Phases 1-2: auth, CRUD, retrieval. Contracts (kit schema, batch CLI) are real; pipeline steps are still stubs.
+> Status: **Phase 4 done**: `npm run evaluate` now runs the full pipeline (needs `LLM_API_KEY`). Earlier phases: auth/CRUD, retrieval, LLM steps. Contracts (kit schema, batch CLI) are real; pipeline steps are still stubs.
 
 ## Quick start
 
@@ -43,7 +43,7 @@ docs/         DECISIONS.md
 | 1 ✅ | Auth, sessions, Kit model, CRUD with ownership checks | 1, 13 |
 | 2 ✅ | Retrieval: safe fetch, robots.txt, rate limit/backoff, link ranking crawler, public discussion | 2, 11 |
 | 3 ✅ | LLM client (TPM budget, retries, JSON repair), requirement extraction, brief, per-category question generation | 3, 10 |
-| 4 | Deterministic scheduler + coverage check + second-pass loop, real tests | 4, 8 |
+| 4 ✅ | Deterministic scheduler + coverage check + second-pass loop, real tests | 4, 8 |
 | 5 | Async generation jobs: progress events, idempotency/dedupe, partial failure; harden evaluate (5 cases < 15 min) | 9, 13 |
 | 6 | Builder UI: edit/reorder/move/add/delete, regenerate-without-clobber (origin/pinned) | 6, 12 |
 | 7 | Practice mode: flashcard stepper, confidence, coverage, next-session ordering | 7 |
@@ -88,8 +88,28 @@ requirements are chunked (5 per call) and the client budgets tokens over a slidi
 5. `planCategories` (deterministic) then `generateQuestions` once per category, each with its own instructions
 6. `generateFlashcards`
 
-Phase 4 adds the coverage loop and the schedule (both deterministic) and assembles the final kit.
+Phase 4 adds the coverage loop and the schedule (both deterministic code) and assembles the final kit.
 
 **Honesty rules:** a stub posting yields few or no requirements and `thin: true`, never padding; an unreachable site
 yields an explicit "nothing retrieved" brief; "no published process" is stated in the prompt so the model does not assume one.
+
+## Coverage, schedule and the batch command (Phase 4)
+
+**Second pass** (`coverageLoop.js`). After the first draft, code (`checkCoverage`) lists every requirement that no
+question references. The loop then asks for questions for those gaps and checks again. Round 1 fills all gaps in
+batches; rounds 2-3 go one must-have requirement per call. It stops when nothing is uncovered, after 3 repair rounds, or
+on a fatal provider error (quota, auth). Nice-to-have gaps get one attempt and are then *reported*, not forced. A
+must-have that is still uncovered gets a flagged template question, so a kit never ships with an uncovered must-have;
+the kit's `research.gaps` says when that happened. `coverage.passes` counts coverage checks.
+
+**Schedule** (`allocateSchedule.js`, no model). Questions are ordered by priority (covers a must-have first, then harder
+first). With at least as many questions as days, that order is cut into consecutive blocks of roughly equal study time,
+so the hardest must-have material is on day 1 and the lightest on the last day. With fewer questions than days, each
+question gets a study day and the remaining days are review days that cycle through the same order (`type: "review"`).
+Always exactly the requested number of days (1 and 60 both work); minutes are integers (10/15/25 per question by
+difficulty; review days half).
+
+**Batch** (`npm run evaluate -- --input cases.json --output kits.json`). One shared LLM client (shared rate budget),
+cases run sequentially, a failing case is recorded and the run continues. `failed` means no kit at all; a kit with
+research gaps (unreachable site, no hiring page, thin posting) is `ok` with the gaps written into the kit.
 
