@@ -29,6 +29,9 @@ export const Question = z.object({
   difficulty: z.number().int().min(1).max(3),
   origin,
   pinned,
+  // OPTIONAL EXTENSION: true when the question was built from a fixed template because the model never produced
+  // one for a must-have requirement (last-resort coverage guarantee).
+  template: z.boolean().optional(),
 });
 
 export const Flashcard = z.object({
@@ -45,6 +48,7 @@ export const ScheduleDay = z.object({
   focus: z.string(),
   question_ids: z.array(z.string()),
   minutes: z.number().int().min(0), // integer minutes, never floats
+  type: z.enum(['study', 'review']).optional(), // OPTIONAL EXTENSION: review days revisit earlier questions
 });
 
 // OPTIONAL EXTENSION: what research found and what it could not. Lets a kit say "thin" / "not found" honestly.

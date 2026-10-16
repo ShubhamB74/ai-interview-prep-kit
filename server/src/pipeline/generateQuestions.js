@@ -6,8 +6,11 @@ const CHUNK = 5;                       // requirements per model call: keeps out
 const MAX_PER_CALL = { 'system-design': 3, 'company-fit': 4, technical: 8, behavioural: 6 };
 
 /** must requirements get two questions, nice ones one (capped per category). */
-export const questionCount = (category, reqs) =>
-  Math.min(MAX_PER_CALL[category] ?? 6, reqs.reduce((n, r) => n + (r.priority === 'must' && category !== 'company-fit' ? 2 : 1), 0));
+export const questionCount = (category, reqs, perRequirement) =>
+  Math.min(
+    MAX_PER_CALL[category] ?? 6,
+    perRequirement ? reqs.length * perRequirement : reqs.reduce((n, r) => n + (r.priority === 'must' && category !== 'company-fit' ? 2 : 1), 0)
+  );
 
 /**
  * Questions for ONE category and a given set of requirements. Separate call per category, with category-specific
@@ -16,7 +19,7 @@ export const questionCount = (category, reqs) =>
  * `category` is set here, not by the model.
  * @returns {Promise<{ questions: object[], dropped: number }>}  questions have no ids yet; the caller assigns them.
  */
-export async function generateQuestions({ category, requirements, role, company, briefFacts, hiringProcess, avoid = [], limitedCompanyInfo = false }, { llm }) {
+export async function generateQuestions({ category, requirements, role, company, briefFacts, hiringProcess, avoid = [], limitedCompanyInfo = false, perRequirement }, { llm }) {
   const valid = new Set(requirements.map((r) => r.id));
   const seen = new Set(avoid.map(dedupeKey));
   const questions = [];
@@ -25,7 +28,7 @@ export async function generateQuestions({ category, requirements, role, company,
   const chunks = category === 'system-design' ? [requirements] : Array.from({ length: Math.ceil(requirements.length / CHUNK) }, (_, i) => requirements.slice(i * CHUNK, (i + 1) * CHUNK));
 
   for (const chunk of chunks) {
-    const count = questionCount(category, chunk);
+    const count = questionCount(category, chunk, perRequirement);
     const out = await llm.completeJson({
       name: `questions:${category}`,
       ...questionsPrompt({
