@@ -1,3 +1,4 @@
+import { NO_BUDGET, SKIP_AT } from '../lib/timeBudget.js';
 import { checkCoverage } from './checkCoverage.js';
 
 /** Max REPAIR rounds after the first check. A pass = one coverage check, so passes <= MAX_REPAIR_ROUNDS + 1. */
@@ -34,7 +35,7 @@ export function nextQuestionId(questions) {
  * @param {{ requirements, questions, fill: (a: {requirements: object[], round: number, existing: object[]}) => Promise<object[]>, maxRounds?: number, onProgress?: Function }} a
  * @returns {Promise<{ questions: object[], coverage: { uncovered_requirement_ids: string[], passes: number }, rounds: object[], templated: string[], errors: object[] }>}
  */
-export async function runCoverageLoop({ requirements, questions, fill, maxRounds = MAX_REPAIR_ROUNDS, onProgress = () => {} }) {
+export async function runCoverageLoop({ requirements, questions, fill, maxRounds = MAX_REPAIR_ROUNDS, onProgress = () => {}, budget = NO_BUDGET }) {
   const byId = new Map(requirements.map((r) => [r.id, r]));
   const all = [...questions];
   const rounds = [];
@@ -46,6 +47,9 @@ export async function runCoverageLoop({ requirements, questions, fill, maxRounds
   for (let round = 1; round <= maxRounds; round++) {
     const targetIds = round === 1 ? check.uncovered : check.uncoveredMust;
     if (!targetIds.length) break;
+    // Running late: stop repairing. Must-haves are still guaranteed below by instant template questions.
+    if (budget.exceeded(SKIP_AT.coverageRepair)) { errors.push({ round, code: 'TIME_BUDGET', message: 'Coverage repair stopped early to stay within the time budget.' }); break; }
+    if (round === 1 && !check.uncoveredMust.length && budget.exceeded(SKIP_AT.niceGaps)) { errors.push({ round, code: 'TIME_BUDGET', message: 'Filling nice-to-have gaps was skipped to stay within the time budget.' }); break; }
     onProgress({ step: 'coverage', status: 'running', detail: `round ${round}: ${targetIds.length} uncovered requirement(s)` });
     let stop = false;
     let added = 0;

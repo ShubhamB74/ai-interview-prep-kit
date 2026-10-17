@@ -3,7 +3,7 @@ import mongoose from 'mongoose';
 /**
  * `kit` holds the Appendix A document (null until generated). It is validated by validateKit()
  * before every write -- Mongoose does not police its shape (Mixed on purpose).
- * status: pending -> running -> ready | failed   (driven by Phase 5 job runner)
+ * status: pending -> running -> ready | failed   (driven by jobs/jobRunner.js)
  */
 const kitSchema = new mongoose.Schema(
   {
@@ -15,11 +15,19 @@ const kitSchema = new mongoose.Schema(
       company_url: { type: String, required: true },
       days: { type: Number, required: true },
     },
-    status: { type: String, enum: ['pending', 'running', 'ready', 'failed'], default: 'pending' },
+    status: { type: String, enum: ['pending', 'running', 'ready', 'failed'], default: 'pending', index: true },
+    // Bumped on every claim. Writes from a job carry its attempt number, so a stale or timed-out run can never
+    // overwrite the result of a newer one.
+    attempt: { type: Number, default: 0 },
+    // { [step]: { status, detail, seq, at } } -- latest state per step, so it never grows with retries.
+    progress: { type: mongoose.Schema.Types.Mixed, default: {} },
+    startedAt: Date,
+    heartbeatAt: Date,
+    finishedAt: Date,
     kit: { type: mongoose.Schema.Types.Mixed, default: null },
     error: { type: mongoose.Schema.Types.Mixed, default: null },
   },
-  { timestamps: true }
+  { timestamps: true, minimize: false }
 );
 
 // One kit per (user, posting+company). Backs the "submitted twice" edge case even under races.

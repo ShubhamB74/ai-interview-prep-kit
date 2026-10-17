@@ -29,3 +29,11 @@ export const createKitBody = z.object({
   company_url: httpUrl,
   days: z.number().int().min(1).max(MAX_DAYS),
 });
+
+export const MAX_BATCH_ITEMS = 10;
+
+/** Items are validated one by one in the route so one bad row doesn't reject the whole upload. */
+export const batchKitsBody = z.object({
+  days: z.number().int().min(1).max(MAX_DAYS),
+  items: z.array(z.unknown()).min(1, 'Provide at least one posting').max(MAX_BATCH_ITEMS, `At most ${MAX_BATCH_ITEMS} postings per upload`),
+});

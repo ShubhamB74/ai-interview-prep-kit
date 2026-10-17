@@ -13,8 +13,8 @@ export function assembleKit({ jd, companyUrl, draft, questions, coverage, schedu
   const gaps = [
     ...role.thinReasons,
     ...research.gaps,
-    ...failures.map((f) => `Step "${f.step}" failed (${f.code}): ${f.message}`),
-    ...coverageErrors.map((e) => `Coverage round ${e.round} hit an error (${e.code}): ${e.message}`),
+    ...failures.map((f) => (f.code === 'TIME_BUDGET' ? `Step "${f.step}" was skipped to stay within the time budget.` : `Step "${f.step}" failed (${f.code}): ${f.message}`)),
+    ...coverageErrors.map((e) => (e.code === 'TIME_BUDGET' ? e.message : `Coverage round ${e.round} hit an error (${e.code}): ${e.message}`)),
     ...(templated.length ? [`The model produced no question for requirement(s) ${templated.join(', ')}, so a generic template question was used.`] : []),
     ...(niceLeft.length ? [`No question could be generated for nice-to-have requirement(s) ${niceLeft.join(', ')}.`] : []),
   ];

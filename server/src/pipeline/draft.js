@@ -1,3 +1,4 @@
+import { NO_BUDGET, SKIP_AT } from '../lib/timeBudget.js';
 import { extractRequirements } from './extractRequirements.js';
 import { researchCompany } from './research.js';
 import { analyzeHiringProcess } from './hiringProcess.js';
@@ -7,15 +8,20 @@ import { generateQuestions } from './generateQuestions.js';
 import { generateFlashcards } from './generateFlashcards.js';
 
 /**
- * Everything up to (not including) the coverage loop and the schedule, which arrive in Phase 4:
+ * Everything up to (not including) the coverage loop and the schedule:
  *   extract requirements -> research the company -> read the hiring process -> brief ->
  *   questions per category (each its own call) -> flashcards.
  * Each step reacts to the previous one's result. Only requirement extraction is fatal: every later step that
- * fails is recorded in `failures` and the draft carries on, so the coverage loop can still try to fill the gap.
+ * fails (or is skipped for time) is recorded in `failures` and the draft carries on, so the coverage loop can still
+ * fill the gap.
  */
-export async function buildDraft({ jd, companyUrl, retrievalCtx, llm, research: researchFn = researchCompany, onProgress = () => {} }) {
+export async function buildDraft({ jd, companyUrl, retrievalCtx, llm, research: researchFn = researchCompany, onProgress = () => {}, budget = NO_BUDGET }) {
   const step = (name, status, detail) => onProgress({ step: name, status, detail });
   const failures = [];
+  const skipForTime = (name) => {
+    failures.push({ step: name, code: 'TIME_BUDGET', message: 'skipped to stay within the time budget' });
+    step(name, 'skipped', 'time budget');
+  };
   const attempt = async (name, fn, fallback) => {
     step(name, 'running');
     try {
@@ -49,16 +55,20 @@ export async function buildDraft({ jd, companyUrl, retrievalCtx, llm, research: 
   const plan = planCategories({ requirements: role.requirements, seniority: role.seniority, hiringProcess, hasCompanyInfo });
   const questions = [];
   for (const p of plan) {
-    const r = await attempt(`questions:${p.category}`, () => generateQuestions({
+    const name = `questions:${p.category}`;
+    if (budget.exceeded(SKIP_AT.category)) { skipForTime(name); continue; } // the coverage loop still guarantees must-haves
+    const r = await attempt(name, () => generateQuestions({
       category: p.category, requirements: p.requirements, role, company: research.company, briefFacts, hiringProcess,
       avoid: questions.map((q) => q.prompt), limitedCompanyInfo: p.limitedCompanyInfo,
     }, { llm }), { questions: [], dropped: 0 });
     for (const q of r.questions) questions.push({ id: `q${questions.length + 1}`, ...q, origin: 'generated' });
   }
 
-  const cards = role.requirements.length
-    ? await attempt('flashcards', () => generateFlashcards({ requirements: role.requirements, role, company: research.company }, { llm }), { flashcards: [], dropped: 0 })
-    : { flashcards: [], dropped: 0 };
+  let cards = { flashcards: [], dropped: 0 };
+  if (role.requirements.length) {
+    if (budget.exceeded(SKIP_AT.flashcards)) skipForTime('flashcards');
+    else cards = await attempt('flashcards', () => generateFlashcards({ requirements: role.requirements, role, company: research.company }, { llm }), cards);
+  }
   const flashcards = cards.flashcards.map((c, i) => ({ id: `f${i + 1}`, ...c, origin: 'generated' }));
 
   return { role, research, hiringProcess, brief, plan: plan.map((p) => ({ category: p.category, requirement_ids: p.requirements.map((r) => r.id) })), questions, flashcards, failures };

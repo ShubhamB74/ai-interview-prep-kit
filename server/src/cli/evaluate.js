@@ -29,7 +29,7 @@ async function main() {
   // ONE client for the whole batch: the token/request budget is shared, so case 2 doesn't blow through the
   // per-minute limit that case 1 already used. Cases run sequentially for the same reason.
   const llm = createLlmClient();
-  const kits = await evaluateCases(cases, { pipeline: (i) => runPipeline({ ...i, llm }), log: (s) => console.log(s) });
+  const kits = await evaluateCases(cases, { pipeline: (i) => runPipeline({ ...i, llm }), log: (s) => console.log(s), totalBudgetMs: Number(process.env.EVALUATE_BUDGET_MS) || 780_000 });
 
   await fs.writeFile(abs(output), JSON.stringify({ version: '1.0', generated_at: new Date().toISOString(), kits }, null, 2));
   const s = llm.stats;

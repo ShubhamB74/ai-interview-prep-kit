@@ -1,5 +1,6 @@
 import { PipelineError } from '../lib/errors.js';
 import { createLlmClient } from '../lib/llm.js';
+import { NO_BUDGET, TimeBudget } from '../lib/timeBudget.js';
 import { validateKit } from '../schema/kit.js';
 import { allocateSchedule } from './allocateSchedule.js';
 import { assembleKit } from './assembleKit.js';
@@ -21,18 +22,20 @@ import { createRetrievalContext } from './retrievalContext.js';
  *   8  schedule                        DETERMINISTIC allocation over exactly `days`
  *   9  assemble + validate             fail loudly rather than save a malformed kit
  *
- * @param {{ jd: string, companyUrl: string, days: number, onProgress?: Function, llm?: object, retrievalCtx?: object, research?: Function }} input
+ * @param {{ jd: string, companyUrl: string, days: number, onProgress?: Function, llm?: object, retrievalCtx?: object, research?: Function, budgetMs?: number, budget?: object }} input
+ *   budgetMs: soft time budget; optional steps (flashcards, late categories, nice-to-have gap rounds) skip themselves when it runs low.
  *   llm / retrievalCtx / research are injectable (tests, and so a batch run can share one LLM budget).
  * @returns {Promise<object>} a kit conforming to Appendix A
  */
-export async function runPipeline({ jd, companyUrl, days, onProgress = () => {}, llm, retrievalCtx, research }) {
+export async function runPipeline({ jd, companyUrl, days, onProgress = () => {}, llm, retrievalCtx, research, budgetMs, budget }) {
   if (typeof jd !== 'string' || !jd.trim()) throw new PipelineError('INVALID_INPUT', 'Job description is empty.');
   if (!Number.isInteger(days) || days < 1) throw new PipelineError('INVALID_INPUT', 'days must be a positive integer.');
   if (typeof companyUrl !== 'string' || !companyUrl.trim()) throw new PipelineError('INVALID_INPUT', 'company_url is required.');
 
+  const clock = budget ?? (budgetMs > 0 ? new TimeBudget({ budgetMs }) : NO_BUDGET);
   const client = llm ?? createLlmClient();
   const draft = await buildDraft({
-    jd, companyUrl, llm: client, onProgress,
+    jd, companyUrl, llm: client, onProgress, budget: clock,
     retrievalCtx: retrievalCtx ?? createRetrievalContext(),
     ...(research ? { research } : {}),
   });
@@ -45,7 +48,7 @@ export async function runPipeline({ jd, companyUrl, days, onProgress = () => {},
       role, company: draft.research.company, hiringProcess, llm: client,
       briefFacts: brief.grounded ? `${brief.summary}\n${brief.what_they_do}` : '',
     }),
-    onProgress,
+    onProgress, budget: clock,
   });
 
   onProgress({ step: 'schedule', status: 'running' });

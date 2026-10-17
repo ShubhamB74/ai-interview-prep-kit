@@ -40,6 +40,12 @@ export const env = {
     // Keeps reasoning models from spending the whole output budget on hidden "thinking". Empty = don't send.
     reasoningEffort: process.env.LLM_REASONING_EFFORT ?? 'low',
   },
+  jobs: {
+    concurrency: num(process.env.JOB_CONCURRENCY, 1),
+    timeoutMs: num(process.env.JOB_TIMEOUT_MS, 600_000),
+    maxAttempts: num(process.env.JOB_MAX_ATTEMPTS, 3),
+    maxActivePerUser: num(process.env.JOB_MAX_ACTIVE_PER_USER, 5),
+  },
   crawl: {
     maxPages: num(process.env.CRAWL_MAX_PAGES, 8),
     delayMs: num(process.env.CRAWL_DELAY_MS, 1000),

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api } from '../lib/api';
 import AuthForm from '../components/AuthForm';
 import NewKitForm from '../components/NewKitForm';
+import KitCard from '../components/KitCard';
 
 export default function Home() {
   const [user, setUser] = useState(undefined); // undefined = checking, null = signed out
@@ -61,15 +62,7 @@ export default function Home() {
         : kits.length === 0 ? <p className="rounded border border-dashed p-6 text-center text-slate-500">No kits yet. Create your first one above.</p>
         : (
           <ul className="space-y-2">
-            {kits.map((k) => (
-              <li key={k.id} className="flex items-center justify-between rounded border bg-white p-3">
-                <div className="min-w-0">
-                  <p className="truncate font-medium">{k.title}</p>
-                  <p className="truncate text-sm text-slate-500">{k.company_url} · {k.days} day{k.days === 1 ? '' : 's'} · {k.status}</p>
-                </div>
-                <button onClick={() => remove(k.id)} className="ml-3 rounded border px-2 py-1 text-sm text-red-700" aria-label={`Delete ${k.title}`}>Delete</button>
-              </li>
-            ))}
+            {kits.map((k) => <KitCard key={k.id} kit={k} onDelete={remove} onAuthError={handleAuthError} />)}
           </ul>
         )}
     </div>

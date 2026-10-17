@@ -9,8 +9,13 @@ import { kitsRouter } from './routes/kits.js';
 import { requireAuth } from './middleware/requireAuth.js';
 import { originCheck } from './middleware/originCheck.js';
 
-/** @param {{ repos: { users: object, kits: object } }} deps  repos are injected so tests can use memory repos. */
-export function createApp({ repos }) {
+const NO_JOBS = { enqueue: () => false };
+
+/**
+ * @param {{ repos: { users: object, kits: object }, jobs?: { enqueue: (id: string) => boolean }, limits?: { maxActivePerUser: number } }} deps
+ *   repos and the job runner are injected so tests can use memory repos and a fake pipeline.
+ */
+export function createApp({ repos, jobs = NO_JOBS, limits = { maxActivePerUser: env.jobs.maxActivePerUser } }) {
   const app = express();
   app.disable('x-powered-by');
   app.set('trust proxy', 1);
@@ -21,7 +26,7 @@ export function createApp({ repos }) {
 
   app.use('/api/health', healthRouter);
   app.use('/api/auth', authRouter(repos));
-  app.use('/api/kits', requireAuth, kitsRouter(repos));
+  app.use('/api/kits', requireAuth, kitsRouter(repos, { jobs, limits }));
 
   app.use((req, res) => res.status(404).json({ error: { code: 'NOT_FOUND', message: 'No such route.' } }));
 
