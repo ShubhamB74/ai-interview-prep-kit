@@ -4,7 +4,7 @@ Paste a job description + company URL + days until interview. The app researches
 then generates a company brief, role breakdown, question bank, flashcards, and a day-by-day schedule
 you can edit and practise against.
 
-> Status: **Phase 4 done**: `npm run evaluate` now runs the full pipeline (needs `LLM_API_KEY`). Earlier phases: auth/CRUD, retrieval, LLM steps. Contracts (kit schema, batch CLI) are real; pipeline steps are still stubs.
+> Status: **Phase 5 done**: kits generate in the background with live progress, retry and restart recovery. Earlier: auth/CRUD, retrieval, LLM steps, coverage + schedule + batch. Contracts (kit schema, batch CLI) are real; pipeline steps are still stubs.
 
 ## Quick start
 
@@ -44,7 +44,7 @@ docs/         DECISIONS.md
 | 2 ✅ | Retrieval: safe fetch, robots.txt, rate limit/backoff, link ranking crawler, public discussion | 2, 11 |
 | 3 ✅ | LLM client (TPM budget, retries, JSON repair), requirement extraction, brief, per-category question generation | 3, 10 |
 | 4 ✅ | Deterministic scheduler + coverage check + second-pass loop, real tests | 4, 8 |
-| 5 | Async generation jobs: progress events, idempotency/dedupe, partial failure; harden evaluate (5 cases < 15 min) | 9, 13 |
+| 5 ✅ | Async generation jobs: progress events, idempotency/dedupe, partial failure; harden evaluate (5 cases < 15 min) | 9, 13 |
 | 6 | Builder UI: edit/reorder/move/add/delete, regenerate-without-clobber (origin/pinned) | 6, 12 |
 | 7 | Practice mode: flashcard stepper, confidence, coverage, next-session ordering | 7 |
 | 8 | Creative feature, deploy, README, walkthrough video | rest |
@@ -112,4 +112,32 @@ difficulty; review days half).
 **Batch** (`npm run evaluate -- --input cases.json --output kits.json`). One shared LLM client (shared rate budget),
 cases run sequentially, a failing case is recorded and the run continues. `failed` means no kit at all; a kit with
 research gaps (unreachable site, no hiring page, thin posting) is `ok` with the gaps written into the kit.
+
+## Generation as a background job (Phase 5)
+
+**Flow.** `POST /api/kits` validates, de-duplicates and creates a `pending` record, queues it, and returns at once.
+`JobRunner` claims it (`pending -> running`, atomically), runs the pipeline, writes per-step progress, and finally stores
+the validated kit (`ready`) or a coded error (`failed`). The UI polls `GET /api/kits/:id` every 1.5 s and renders the
+steps; failed kits show the reason and a **Try again** button (`POST /api/kits/:id/retry`).
+
+**When it takes ninety seconds.** Nothing blocks: the request returned long ago, progress is persisted, and a reload or
+a second tab shows the same state. A deadline (`JOB_TIMEOUT_MS`) marks a stuck job `failed: JOB_TIMEOUT`; before that, the
+pipeline's soft budget makes it skip optional steps (flashcards, late categories, nice-to-have gap rounds) and say so in the kit.
+
+**When it fails halfway.** Only requirement extraction is fatal. Any other step that fails is recorded in the kit's
+`research.gaps` and the kit still ships; must-have coverage is guaranteed by the second pass (Phase 4). If the whole run
+fails, the record keeps `error: {code, message}` and can be retried.
+
+**When it is triggered twice.** Three layers: a unique index on (user, hash of normalised posting + company URL), an
+atomic `claim`, and an in-process enqueue guard. The second submit returns the existing kit with `duplicate: true`. Every
+write from a job carries its `attempt` number, so a timed-out run that wakes up later cannot overwrite a retry.
+
+**When the server restarts.** On boot, interrupted `running` jobs go back to `pending` and everything pending is re-queued
+(up to `JOB_MAX_ATTEMPTS`, then `failed: JOB_INTERRUPTED`).
+
+**Limits.** At most `JOB_MAX_ACTIVE_PER_USER` kits generating per user (429 otherwise) and 10 postings per upload
+(`POST /api/kits/batch`; the client parses the file, each row is validated and reported separately).
+
+**Known limitation.** The queue lives in the API process, so this assumes one instance (fine for a free-tier deploy). Running several instances
+would need an external queue; the atomic `claim` already keeps them from double-running a kit.
 
