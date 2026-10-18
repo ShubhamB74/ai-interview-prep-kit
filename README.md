@@ -4,14 +4,14 @@ Paste a job description + company URL + days until interview. The app researches
 then generates a company brief, role breakdown, question bank, flashcards, and a day-by-day schedule
 you can edit and practise against.
 
-> Status: **Phase 5 done**: kits generate in the background with live progress, retry and restart recovery. Earlier: auth/CRUD, retrieval, LLM steps, coverage + schedule + batch. Contracts (kit schema, batch CLI) are real; pipeline steps are still stubs.
+> Status: **Phase 6 done**: a full builder (edit, reorder, add, delete, regenerate without losing edits) and multi-role upload. Earlier: background jobs, coverage + schedule, LLM steps, retrieval, auth. Contracts (kit schema, batch CLI) are real; pipeline steps are still stubs.
 
 ## Quick start
 
 ```bash
 npm install
 cp .env.example .env        # fill in LLM_API_KEY etc.
-npm test                    # schema + API tests (no Mongo needed)
+npm test                    # server tests (no Mongo needed); `npm run test:web` for the UI tests; `npm run test:all` for both
 npm run evaluate -- --input fixtures/cases.sample.json --output kits.json
 npm run research -- https://example.com   # try retrieval on a real site
 npm run draft -- jd.txt https://example.com  # extraction -> research -> brief -> questions -> flashcards (needs LLM_API_KEY)
@@ -45,7 +45,7 @@ docs/         DECISIONS.md
 | 3 ✅ | LLM client (TPM budget, retries, JSON repair), requirement extraction, brief, per-category question generation | 3, 10 |
 | 4 ✅ | Deterministic scheduler + coverage check + second-pass loop, real tests | 4, 8 |
 | 5 ✅ | Async generation jobs: progress events, idempotency/dedupe, partial failure; harden evaluate (5 cases < 15 min) | 9, 13 |
-| 6 | Builder UI: edit/reorder/move/add/delete, regenerate-without-clobber (origin/pinned) | 6, 12 |
+| 6 ✅ | Builder UI: edit/reorder/move/add/delete, regenerate-without-clobber (origin/pinned) | 6, 12 |
 | 7 | Practice mode: flashcard stepper, confidence, coverage, next-session ordering | 7 |
 | 8 | Creative feature, deploy, README, walkthrough video | rest |
 
@@ -140,4 +140,50 @@ write from a job carries its `attempt` number, so a timed-out run that wakes up 
 
 **Known limitation.** The queue lives in the API process, so this assumes one instance (fine for a free-tier deploy). Running several instances
 would need an external queue; the atomic `claim` already keeps them from double-running a kit.
+
+## The builder and the state model (Phase 6)
+
+**Representing generated, edited and pinned state.** Every question and flashcard carries `origin`
+(`generated` | `edited` | `user`) and an optional `pinned`. The company brief and schedule days carry `origin` too.
+
+| Action | Result |
+|---|---|
+| Pipeline creates an item | `origin: generated` |
+| User changes text, difficulty, requirements, or moves it to another category | `generated -> edited` |
+| User writes an item | `origin: user` |
+| User pins / unpins | `pinned` set / removed (origin unchanged) |
+| Pure reordering | no state change |
+
+A regeneration replaces **exactly** the items where `origin` is not `edited`/`user` and `pinned` is not set
+(`isReplaceable` in `shared/src/kitOps.js`); everything else is kept, and new questions never repeat a surviving prompt.
+
+**Why a regeneration cannot clobber edits.**
+1. *Edits are id-addressed ops*, applied to the latest document, so edits to different items commute.
+2. *Every write is compare-and-swap on a `version`* (`applyToKit`): read, copy, mutate, validate against Appendix A,
+   write only if the version is unchanged, otherwise re-read and re-apply. Two writers merge; neither overwrites.
+3. *A regeneration decides what to delete at commit time*, against the latest document, not the snapshot the model saw.
+   An edit, addition or deletion made while the model was thinking is therefore respected.
+4. A regeneration that returns nothing, fails, or can no longer reach the company site changes nothing.
+5. After a category regeneration, coverage is re-checked for *that category's* requirements only.
+
+**What can be edited.** Brief (summary, what they do), questions (text, answer outline, difficulty, requirements,
+category, order, pin), flashcards (front, back, order, pin), schedule days (focus, minutes), plus add/delete of
+questions and flashcards. **Regenerate**: the brief (re-researches the site; asks first if you edited it), one question
+category, or the schedule (instant; can change the number of days). Requirements are read-only.
+
+**Schedule after edits.** It is derived from the questions, so adding or deleting a question re-flows it
+deterministically; days you edited by hand keep their focus and minutes. "Rebuild schedule" starts from scratch.
+
+**Interaction design.** Edits apply instantly in the browser using the *same* rule code as the server
+(`@prepkit/shared/kitOps`), are sent in order in the background, and the server's version replaces the local one when the
+queue drains. Background polls are ignored while edits are in flight; a rejected edit shows an error and restores the
+server's version. The UI is a roving-tabindex tablist; every action is a real button, reordering uses arrow buttons
+(keyboard-operable), inline editors save with Enter/Ctrl+Enter and cancel with Esc and return focus to their Edit button,
+status changes are announced via live regions, and the layout wraps for phones.
+
+**Uploading several roles.** The Upload tab accepts a `.json` list of `{ jd, company_url }` or a `.csv` with those
+columns (max 10); each row is validated and reported separately.
+
+**Known limitations.** Two tabs editing the *same field of the same item* is last-write-wins. Reordering has no
+drag-and-drop. Requirements are not editable. Flashcards cannot be regenerated on their own.
 
