@@ -22,7 +22,7 @@ export const Requirement = z.object({
 
 export const Question = z.object({
   id: z.string().min(1),
-  requirement_ids: z.array(z.string()).min(1),
+  requirement_ids: z.array(z.string()),
   category: z.enum(['technical', 'behavioural', 'system-design', 'company-fit']),
   prompt: z.string().min(1),
   answer_outline: z.string(),
@@ -32,6 +32,11 @@ export const Question = z.object({
   // OPTIONAL EXTENSION: true when the question was built from a fixed template because the model never produced
   // one for a must-have requirement (last-resort coverage guarantee).
   template: z.boolean().optional(),
+}).superRefine((q, ctx) => {
+  // Appendix A: every question references the requirement ids it covers. A question the user wrote by hand may cover none.
+  if (q.requirement_ids.length === 0 && q.origin !== 'user') {
+    ctx.addIssue({ code: 'custom', path: ['requirement_ids'], message: 'must reference at least one requirement' });
+  }
 });
 
 export const Flashcard = z.object({
@@ -49,6 +54,7 @@ export const ScheduleDay = z.object({
   question_ids: z.array(z.string()),
   minutes: z.number().int().min(0), // integer minutes, never floats
   type: z.enum(['study', 'review']).optional(), // OPTIONAL EXTENSION: review days revisit earlier questions
+  origin: z.enum(['generated', 'edited']).optional(), // OPTIONAL EXTENSION: edited focus/minutes survive re-allocation
 });
 
 // OPTIONAL EXTENSION: what research found and what it could not. Lets a kit say "thin" / "not found" honestly.
@@ -59,6 +65,9 @@ export const ResearchNotes = z.object({
     known: z.boolean(),
     confidence: z.enum(['published', 'reported', 'none']),
     signals: z.record(z.boolean()),
+    // kept so a single category can be regenerated later with the same context the first draft had
+    excerpt: z.string().optional(),
+    reported_excerpts: z.array(z.object({ url: z.string(), text: z.string() })).optional(),
   }),
   discussion_searched: z.boolean(),
   discussion_found: z.boolean(),
@@ -81,6 +90,7 @@ export const KitSchema = z.object({
     summary: z.string(),
     what_they_do: z.string(),
     sources: z.array(z.string()),
+    origin: z.enum(['generated', 'edited']).optional(), // OPTIONAL EXTENSION: 'edited' => regenerating asks for confirmation
   }),
   role: z.object({
     title: z.string(),

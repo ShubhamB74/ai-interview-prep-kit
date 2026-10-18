@@ -3,7 +3,10 @@ import { asyncHandler } from '../lib/asyncHandler.js';
 import { AppError } from '../lib/errors.js';
 import { inputHash, titleFromJd } from '../lib/inputHash.js';
 import { validateBody } from '../middleware/validate.js';
+import { opsBody, regenerateBody } from '../schema/ops.js';
 import { batchKitsBody, createKitBody } from '../schema/requests.js';
+import { applyOpsToKit } from '../services/kitEditor.js';
+import { regenerateSchedule } from '../services/regenerate.js';
 
 const progressList = (progress) =>
   Object.entries(progress ?? {}).map(([step, v]) => ({ step, status: v.status, detail: v.detail ?? null, seq: v.seq ?? 0 })).sort((a, b) => a.seq - b.seq);
@@ -13,7 +16,7 @@ const summary = (k) => ({
   error: k.error ?? null, createdAt: k.createdAt,
 });
 const detail = (k) => ({
-  ...summary(k), input: k.input, kit: k.kit, progress: progressList(k.progress), attempt: k.attempt,
+  ...summary(k), input: k.input, kit: k.kit, version: k.version ?? 0, regen: k.regen ?? null, progress: progressList(k.progress), attempt: k.attempt,
   startedAt: k.startedAt, finishedAt: k.finishedAt, updatedAt: k.updatedAt,
 });
 
@@ -24,7 +27,7 @@ const tooMany = (max) => new AppError('TOO_MANY_ACTIVE_JOBS', `You already have 
  * Mounted behind requireAuth. Every query is scoped by req.userId.
  * POST creates the record and queues generation; the client polls GET /:id for status + progress.
  */
-export function kitsRouter({ kits }, { jobs, limits }) {
+export function kitsRouter({ kits }, { jobs, limits, regen }) {
   const r = Router();
 
   /** Dedupe, enforce the per-user cap, create, queue. The same posting + company never runs twice. */
@@ -71,6 +74,32 @@ export function kitsRouter({ kits }, { jobs, limits }) {
     const k = await kits.findOwned(req.params.id, req.userId);
     if (!k) throw notFound(); // 404, not 403: don't reveal that someone else's kit exists
     res.json({ kit: detail(k) });
+  }));
+
+  // Edit anything in a ready kit. Ops address items by id and are applied to the latest version, so parallel edits merge.
+  r.post('/:id/ops', validateBody(opsBody), asyncHandler(async (req, res) => {
+    const saved = await applyOpsToKit(kits, req.params.id, req.userId, req.body.ops);
+    res.json({ kit: detail(saved) });
+  }));
+
+  // Regenerate one section. Schedule: instant. Brief / one category: background (202), poll `regen` on the kit.
+  r.post('/:id/regenerate', validateBody(regenerateBody), asyncHandler(async (req, res) => {
+    const { section, category, force, days } = req.body;
+    const k = await kits.findOwned(req.params.id, req.userId);
+    if (!k) throw notFound();
+    if (k.status !== 'ready' || !k.kit) throw new AppError('KIT_NOT_READY', 'This kit is not ready to edit yet.', { status: 409 });
+
+    if (section === 'schedule') {
+      const saved = await regenerateSchedule({ kits, id: k.id, userId: req.userId, days });
+      return res.json({ kit: detail(saved) });
+    }
+    if (section === 'brief' && k.kit.company_brief.origin === 'edited' && !force) {
+      throw new AppError('REGENERATE_WOULD_DISCARD_EDITS', 'You edited the company brief. Regenerating will replace your changes.', { status: 409 });
+    }
+    const claimed = await kits.claimRegen(k.id, req.userId, { section, ...(category ? { category } : {}) });
+    if (!claimed) throw new AppError('REGEN_IN_PROGRESS', 'Another section of this kit is already being regenerated.', { status: 409 });
+    regen.enqueue({ kitId: k.id, userId: req.userId, section, category, force });
+    res.status(202).json({ kit: detail(claimed) });
   }));
 
   r.post('/:id/retry', asyncHandler(async (req, res) => {

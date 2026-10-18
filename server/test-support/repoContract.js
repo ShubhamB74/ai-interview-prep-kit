@@ -119,4 +119,41 @@ export const kitRepoContract = [
     assert.deepEqual(new Set(list.map((k) => k.id)), new Set(kits.map((k) => k.id)));
     assert.ok(list.every((k) => k.input.company_url === 'http://x' && k.status === 'pending'));
   }],
+
+  ['finish bumps the version; replaceKit is compare-and-swap on it, only for the owner and only when ready', async (repos) => {
+    const { user, kits: [k] } = await seed(repos);
+    assert.equal(await repos.kits.replaceKit(k.id, user.id, 0, { x: 1 }), null, 'not ready yet');
+    await repos.kits.claim(k.id);
+    await repos.kits.finish(k.id, 1, { v: 'gen' });
+    const ready = await repos.kits.findOwned(k.id, user.id);
+    assert.equal(ready.version, 1);
+    const a = await repos.kits.replaceKit(k.id, user.id, 1, { v: 'a' });
+    assert.deepEqual([a.version, a.kit], [2, { v: 'a' }]);
+    assert.equal(await repos.kits.replaceKit(k.id, user.id, 1, { v: 'stale' }), null, 'stale version loses');
+    const other = await repos.users.create({ email: `o${Math.random()}@x.com`, passwordHash: 'h' });
+    assert.equal(await repos.kits.replaceKit(k.id, other.id, 2, { v: 'x' }), null, 'not the owner');
+    assert.deepEqual((await repos.kits.findOwned(k.id, user.id)).kit, { v: 'a' });
+    const [w1, w2] = await Promise.all([repos.kits.replaceKit(k.id, user.id, 2, { v: 'b' }), repos.kits.replaceKit(k.id, user.id, 2, { v: 'c' })]);
+    assert.equal([w1, w2].filter(Boolean).length, 1, 'exactly one of two concurrent writers wins');
+  }],
+
+  ['regeneration slot: one at a time per kit, ready kits only, failed state can be replaced, cleared on recovery', async (repos) => {
+    const { user, kits: [k] } = await seed(repos);
+    assert.equal(await repos.kits.claimRegen(k.id, user.id, { section: 'brief' }), null, 'not ready');
+    await repos.kits.claim(k.id);
+    await repos.kits.finish(k.id, 1, { v: 1 });
+    const [a, b] = await Promise.all([repos.kits.claimRegen(k.id, user.id, { section: 'brief' }), repos.kits.claimRegen(k.id, user.id, { section: 'questions', category: 'technical' })]);
+    assert.equal([a, b].filter(Boolean).length, 1);
+    const claimed = a || b;
+    assert.equal(claimed.regen.status, 'running');
+    const other = await repos.users.create({ email: `o${Math.random()}@x.com`, passwordHash: 'h' });
+    await repos.kits.setRegen(k.id, { section: 'brief', status: 'failed', error: { code: 'E', message: 'm' } });
+    assert.equal(await repos.kits.claimRegen(k.id, other.id, { section: 'brief' }), null, 'not the owner');
+    assert.equal((await repos.kits.claimRegen(k.id, user.id, { section: 'brief' })).regen.status, 'running', 'a failed slot can be re-claimed');
+    await repos.kits.recoverInterrupted(3);
+    assert.equal((await repos.kits.findOwned(k.id, user.id)).regen, null, 'a running regeneration does not survive a restart');
+    await repos.kits.claimRegen(k.id, user.id, { section: 'brief' });
+    await repos.kits.setRegen(k.id, null);
+    assert.equal((await repos.kits.findOwned(k.id, user.id)).regen, null);
+  }],
 ];

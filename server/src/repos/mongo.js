@@ -16,6 +16,8 @@ const toKit = (d) =>
     input: { jd: d.input.jd, company_url: d.input.company_url, days: d.input.days },
     status: d.status,
     attempt: d.attempt ?? 0,
+    version: d.version ?? 0,
+    regen: d.regen ?? null,
     progress: d.progress ?? {},
     kit: d.kit,
     error: d.error,
@@ -82,7 +84,7 @@ export function createMongoRepos() {
     },
     async finish(id, attempt, kit) {
       if (!validId(id)) return false;
-      const r = await KitModel.updateOne({ _id: id, status: 'running', attempt }, { $set: { status: 'ready', kit, error: null, finishedAt: new Date() } });
+      const r = await KitModel.updateOne({ _id: id, status: 'running', attempt }, { $set: { status: 'ready', kit, error: null, finishedAt: new Date() }, $inc: { version: 1 } });
       return r.matchedCount === 1;
     },
     async fail(id, attempt, error) {
@@ -90,12 +92,31 @@ export function createMongoRepos() {
       const r = await KitModel.updateOne({ _id: id, status: 'running', attempt }, { $set: { status: 'failed', error, finishedAt: new Date() } });
       return r.matchedCount === 1;
     },
+    // ---- editing + regeneration ----
+    /** Replace the kit document only if nobody wrote since `expectedVersion` was read. Returns the new record or null. */
+    replaceKit: async (id, userId, expectedVersion, kit) => (validId(id)
+      ? toKit(await KitModel.findOneAndUpdate({ _id: id, userId, status: 'ready', version: expectedVersion }, { $set: { kit }, $inc: { version: 1 } }, { new: true }))
+      : null),
+    /** Start a regeneration unless one is already running on this kit. Returns the record or null. */
+    claimRegen: async (id, userId, regen) => (validId(id)
+      ? toKit(await KitModel.findOneAndUpdate(
+        { _id: id, userId, status: 'ready', $or: [{ regen: null }, { 'regen.status': { $ne: 'running' } }] },
+        { $set: { regen: { ...regen, status: 'running', startedAt: new Date() } } },
+        { new: true }
+      ))
+      : null),
+    /** Clear (null) or mark failed a regeneration. */
+    async setRegen(id, regen) {
+      if (!validId(id)) return false;
+      return (await KitModel.updateOne({ _id: id }, { $set: { regen } })).matchedCount === 1;
+    },
     /** failed -> pending for an owner-requested retry. */
     requeue: async (id, userId) => (validId(id)
       ? toKit(await KitModel.findOneAndUpdate({ _id: id, userId, status: 'failed' }, { $set: { status: 'pending', error: null, progress: {} } }, { new: true }))
       : null),
     /** Startup recovery: orphaned `running` jobs go back to pending (or fail after maxAttempts). Returns all pending ids. */
     async recoverInterrupted(maxAttempts) {
+      await KitModel.updateMany({ 'regen.status': 'running' }, { $set: { regen: null } }); // a regeneration cannot survive a restart
       await KitModel.updateMany({ status: 'running', attempt: { $lt: maxAttempts } }, { $set: { status: 'pending' } });
       await KitModel.updateMany({ status: 'running', attempt: { $gte: maxAttempts } }, {
         $set: { status: 'failed', finishedAt: new Date(), error: { code: 'JOB_INTERRUPTED', message: 'Generation was interrupted by a server restart too many times.' } },

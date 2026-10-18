@@ -7,7 +7,7 @@ export function createMemoryRepos() {
   const K = new Map();
   const uid = () => crypto.randomBytes(12).toString('hex');
   const touch = (k) => { k.updatedAt = new Date(); return k; };
-  const copy = (k) => k && { ...k, progress: { ...k.progress } };
+  const copy = (k) => k && { ...k, progress: { ...k.progress }, kit: k.kit ? structuredClone(k.kit) : k.kit };
   const progressKey = (step) => String(step).replace(/[.$]/g, '_');
 
   const users = {
@@ -28,7 +28,7 @@ export function createMemoryRepos() {
       const existing = await kits.findByHash(data.userId, data.inputHash);
       if (existing) return existing;
       const now = new Date();
-      const k = { id: uid(), status: 'pending', attempt: 0, progress: {}, kit: null, error: null, startedAt: null, heartbeatAt: null, finishedAt: null, createdAt: now, updatedAt: now, ...data };
+      const k = { id: uid(), status: 'pending', attempt: 0, version: 0, regen: null, progress: {}, kit: null, error: null, startedAt: null, heartbeatAt: null, finishedAt: null, createdAt: now, updatedAt: now, ...data };
       K.set(k.id, k);
       return copy(k);
     },
@@ -62,7 +62,7 @@ export function createMemoryRepos() {
     async finish(id, attempt, kit) {
       const k = K.get(id);
       if (!k || k.status !== 'running' || k.attempt !== attempt) return false;
-      Object.assign(k, { status: 'ready', kit, error: null, finishedAt: new Date() });
+      Object.assign(k, { status: 'ready', kit, error: null, finishedAt: new Date(), version: k.version + 1 });
       touch(k);
       return true;
     },
@@ -70,6 +70,25 @@ export function createMemoryRepos() {
       const k = K.get(id);
       if (!k || k.status !== 'running' || k.attempt !== attempt) return false;
       Object.assign(k, { status: 'failed', error, finishedAt: new Date() });
+      touch(k);
+      return true;
+    },
+    async replaceKit(id, userId, expectedVersion, kit) {
+      const k = K.get(id);
+      if (!k || k.userId !== userId || k.status !== 'ready' || k.version !== expectedVersion) return null;
+      Object.assign(k, { kit: structuredClone(kit), version: k.version + 1 });
+      return copy(touch(k));
+    },
+    async claimRegen(id, userId, regen) {
+      const k = K.get(id);
+      if (!k || k.userId !== userId || k.status !== 'ready' || k.regen?.status === 'running') return null;
+      k.regen = { ...regen, status: 'running', startedAt: new Date() };
+      return copy(touch(k));
+    },
+    async setRegen(id, regen) {
+      const k = K.get(id);
+      if (!k) return false;
+      k.regen = regen;
       touch(k);
       return true;
     },
@@ -81,6 +100,7 @@ export function createMemoryRepos() {
     },
     async recoverInterrupted(maxAttempts) {
       for (const k of K.values()) {
+        if (k.regen?.status === 'running') k.regen = null;
         if (k.status !== 'running') continue;
         if (k.attempt < maxAttempts) k.status = 'pending';
         else Object.assign(k, { status: 'failed', finishedAt: new Date(), error: { code: 'JOB_INTERRUPTED', message: 'Generation was interrupted by a server restart too many times.' } });

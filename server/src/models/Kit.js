@@ -19,6 +19,11 @@ const kitSchema = new mongoose.Schema(
     // Bumped on every claim. Writes from a job carry its attempt number, so a stale or timed-out run can never
     // overwrite the result of a newer one.
     attempt: { type: Number, default: 0 },
+    // Optimistic-concurrency counter for the kit document: every write (generation, edit, regeneration commit) bumps it,
+    // and edits are applied with "only if the version is still N", so two writers can never silently overwrite each other.
+    version: { type: Number, default: 0 },
+    // At most one regeneration per kit at a time: { section, category?, status: 'running'|'failed', startedAt, error? } or null.
+    regen: { type: mongoose.Schema.Types.Mixed, default: null },
     // { [step]: { status, detail, seq, at } } -- latest state per step, so it never grows with retries.
     progress: { type: mongoose.Schema.Types.Mixed, default: {} },
     startedAt: Date,

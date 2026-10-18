@@ -1,4 +1,5 @@
 'use client';
+import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../lib/api';
 import ProgressSteps from './ProgressSteps';
@@ -59,6 +60,7 @@ export default function KitCard({ kit: initial, onDelete, onAuthError }) {
           <p className="truncate text-sm text-slate-500">{kit.company_url} · {kit.days} day{kit.days === 1 ? '' : 's'}</p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          {kit.status === 'ready' && <Link href={`/kits/${kit.id}`} className="rounded bg-indigo-600 px-3 py-1 text-sm font-medium text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">Open</Link>}
           <span className={`rounded px-2 py-0.5 text-xs font-medium ${badge}`}>{kit.status === 'pending' ? 'queued' : kit.status}</span>
           <button onClick={() => onDelete(kit.id)} className="rounded border px-2 py-1 text-sm text-red-700" aria-label={`Delete ${kit.title}`}>Delete</button>
         </div>

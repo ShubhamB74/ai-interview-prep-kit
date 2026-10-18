@@ -43,7 +43,10 @@ export function assembleKit({ jd, companyUrl, draft, questions, coverage, schedu
     research: {
       gaps,
       hiring_page: research.crawl.hiringPage,
-      hiring_process: { known: hiringProcess.known, confidence: hiringProcess.confidence, signals: hiringProcess.signals },
+      hiring_process: {
+        known: hiringProcess.known, confidence: hiringProcess.confidence, signals: hiringProcess.signals,
+        excerpt: hiringProcess.excerpt, reported_excerpts: hiringProcess.reported_excerpts,
+      },
       discussion_searched: research.discussion.searched,
       discussion_found: research.discussion.found,
       discussion_sources: research.discussion.snippets.map((s) => s.url),
