@@ -4,14 +4,14 @@ Paste a job description + company URL + days until interview. The app researches
 then generates a company brief, role breakdown, question bank, flashcards, and a day-by-day schedule
 you can edit and practise against.
 
-> Status: **Phase 6 done**: a full builder (edit, reorder, add, delete, regenerate without losing edits) and multi-role upload. Earlier: background jobs, coverage + schedule, LLM steps, retrieval, auth. Contracts (kit schema, batch CLI) are real; pipeline steps are still stubs.
+> Status: **Phase 7 done**: practice mode with spaced repetition. Earlier: builder, background jobs, coverage + schedule, LLM steps, retrieval, auth. Contracts (kit schema, batch CLI) are real; pipeline steps are still stubs.
 
 ## Quick start
 
 ```bash
 npm install
 cp .env.example .env        # fill in LLM_API_KEY etc.
-npm test                    # server tests (no Mongo needed); `npm run test:web` for the UI tests; `npm run test:all` for both
+npm test                    # server tests (no Mongo needed); `npm run test:web` for the UI tests (builder + practice); `npm run test:all` for both
 npm run evaluate -- --input fixtures/cases.sample.json --output kits.json
 npm run research -- https://example.com   # try retrieval on a real site
 npm run draft -- jd.txt https://example.com  # extraction -> research -> brief -> questions -> flashcards (needs LLM_API_KEY)
@@ -46,7 +46,7 @@ docs/         DECISIONS.md
 | 4 ✅ | Deterministic scheduler + coverage check + second-pass loop, real tests | 4, 8 |
 | 5 ✅ | Async generation jobs: progress events, idempotency/dedupe, partial failure; harden evaluate (5 cases < 15 min) | 9, 13 |
 | 6 ✅ | Builder UI: edit/reorder/move/add/delete, regenerate-without-clobber (origin/pinned) | 6, 12 |
-| 7 | Practice mode: flashcard stepper, confidence, coverage, next-session ordering | 7 |
+| 7 ✅ | Practice mode: flashcard stepper, confidence, coverage, next-session ordering | 7 |
 | 8 | Creative feature, deploy, README, walkthrough video | rest |
 
 ## Remaining README sections (fill as we build)
@@ -186,4 +186,36 @@ columns (max 10); each row is validated and reported separately.
 
 **Known limitations.** Two tabs editing the *same field of the same item* is last-write-wins. Reordering has no
 drag-and-drop. Requirements are not editable. Flashcards cannot be regenerated on their own.
+
+## Practice mode (Phase 7)
+
+**What it does.** Step through flashcards one at a time, reveal the answer, say how confident you were (1 didn't know,
+2 shaky, 3 knew it), see what you've covered per requirement, and get the next session ordered by what you were least
+confident about. Everything is keyboard-operable: Space/Enter reveals, 1/2/3 rate.
+
+**The ordering I chose, and why: Leitner boxes.** Each card sits in a box from 1 to 5. A miss sends it to box 1 (due again
+right away, and again later in the same session, at most twice), "shaky" keeps it where it is, "knew it" moves it up one box
+(a card seen for the first time goes straight to box 2). Review intervals are 0, 1, 2, 4 and 7 days by box. A session is
+ordered *least confident first*: lowest box first (never-seen cards sit between box 2 and box 3), then cards covering
+a must-have requirement, then the most overdue, then kit order.
+
+*Why not a plain confidence sort?* It forgets: a card you got right once looks "strong" forever and one you missed once looks
+"weak" even after five correct answers. A box number carries the whole history in one value, so weak cards come back sooner and
+more often, strong ones fade but still resurface. *Why not SM-2?* Per-card ease factors and fractional day intervals pay off over
+months; interview prep is days. Boxes are a sentence to explain and trivial to test.
+
+*One adaptation for a deadline:* Leitner assumes open-ended learning. Here every interval is capped to a third of the time left
+before the interview (`schedule.starts_at + days_available`), so with two days left no card waits a week.
+
+**State and trust.** The server stamps the time and applies the transition; the client sends only (card, confidence, review id)
+and shows a local guess meanwhile, using the same rule code (`@prepkit/shared/leitner`). Progress is stored per card beside the
+kit document, written with compare-and-swap on the card's review count, so rating while editing never conflicts, two parallel
+ratings of one card both apply, and a retried request (same review id) counts once. Editing a card keeps its progress;
+deleting it removes it from every queue.
+
+**Covered vs not covered.** Per requirement: how many flashcards cover it, how many you've reviewed, how many are confident
+(box 4+); requirements with no flashcards are flagged with a shortcut to add one. A weak-spots list shows the cards stuck in the low boxes.
+
+**Known limitations.** Progress is per kit, not per user across kits. There is no daily reminder. A session is a snapshot of the queue
+at its start (cards added during a session appear in the next one).
 
