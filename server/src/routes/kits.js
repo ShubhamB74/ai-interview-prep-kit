@@ -3,10 +3,11 @@ import { asyncHandler } from '../lib/asyncHandler.js';
 import { AppError } from '../lib/errors.js';
 import { inputHash, titleFromJd } from '../lib/inputHash.js';
 import { validateBody } from '../middleware/validate.js';
-import { opsBody, regenerateBody } from '../schema/ops.js';
+import { opsBody, regenerateBody, reviewBody } from '../schema/ops.js';
 import { batchKitsBody, createKitBody } from '../schema/requests.js';
 import { applyOpsToKit } from '../services/kitEditor.js';
 import { regenerateSchedule } from '../services/regenerate.js';
+import { getPractice, recordReview, resetPractice } from '../services/practice.js';
 
 const progressList = (progress) =>
   Object.entries(progress ?? {}).map(([step, v]) => ({ step, status: v.status, detail: v.detail ?? null, seq: v.seq ?? 0 })).sort((a, b) => a.seq - b.seq);
@@ -100,6 +101,21 @@ export function kitsRouter({ kits }, { jobs, limits, regen }) {
     if (!claimed) throw new AppError('REGEN_IN_PROGRESS', 'Another section of this kit is already being regenerated.', { status: 409 });
     regen.enqueue({ kitId: k.id, userId: req.userId, section, category, force });
     res.status(202).json({ kit: detail(claimed) });
+  }));
+
+  // ---- practice mode: per-card progress (Leitner boxes), kept beside the kit so reviewing never conflicts with editing ----
+  r.get('/:id/practice', asyncHandler(async (req, res) => {
+    res.json({ practice: await getPractice(kits, req.params.id, req.userId) });
+  }));
+
+  r.post('/:id/practice/reviews', validateBody(reviewBody), asyncHandler(async (req, res) => {
+    const result = await recordReview(kits, req.params.id, req.userId, { cardId: req.body.card_id, confidence: req.body.confidence, reviewId: req.body.review_id });
+    res.json(result);
+  }));
+
+  r.delete('/:id/practice', asyncHandler(async (req, res) => {
+    await resetPractice(kits, req.params.id, req.userId);
+    res.status(204).end();
   }));
 
   r.post('/:id/retry', asyncHandler(async (req, res) => {

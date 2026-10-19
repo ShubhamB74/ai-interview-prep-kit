@@ -102,6 +102,7 @@ export const KitSchema = z.object({
   flashcards: z.array(Flashcard),
   schedule: z.object({
     days_available: z.number().int().min(1),
+    starts_at: z.string().optional(), // OPTIONAL EXTENSION: when the N days started counting (interview = starts_at + days_available)
     days: z.array(ScheduleDay),
   }),
   coverage: z.object({

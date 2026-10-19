@@ -54,3 +54,10 @@ export const regenerateBody = z.discriminatedUnion('section', [
   z.object({ section: z.literal('brief'), force: z.boolean().optional() }),
   z.object({ section: z.literal('questions'), category: CATEGORY }),
 ]);
+
+/** One practice rating. Time is NOT accepted from the client: the server stamps it. */
+export const reviewBody = z.object({
+  card_id: z.string().regex(/^[A-Za-z0-9_-]{1,40}$/),
+  confidence: z.number().int().min(1).max(3),
+  review_id: z.string().regex(/^[A-Za-z0-9_-]{6,40}$/).optional(),
+});

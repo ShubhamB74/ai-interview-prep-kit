@@ -2,11 +2,12 @@
 import { useRef, useState } from 'react';
 import BriefSection from './BriefSection';
 import FlashcardsSection from './FlashcardsSection';
+import PracticeSection from './PracticeSection';
 import QuestionsSection from './QuestionsSection';
 import ScheduleSection from './ScheduleSection';
 import { Btn, CATEGORY_LABEL, focusRing } from './ui';
 
-const TABS = [['overview', 'Overview'], ['questions', 'Questions'], ['flashcards', 'Flashcards'], ['schedule', 'Schedule']];
+const TABS = [['overview', 'Overview'], ['questions', 'Questions'], ['flashcards', 'Flashcards'], ['practice', 'Practice'], ['schedule', 'Schedule']];
 
 /** Roving-tabindex tablist: Left/Right/Home/End move between tabs, as screen-reader users expect. */
 function Tabs({ active, onChange, counts }) {
@@ -36,6 +37,8 @@ function Tabs({ active, onChange, counts }) {
 
 export default function KitBuilder({ rec, kit, saving, error, onClearError, onEdit, onRegenerate }) {
   const [tab, setTab] = useState('overview');
+  const [practiceOpened, setPracticeOpened] = useState(false);
+  const select = (key) => { if (key === 'practice') setPracticeOpened(true); setTab(key); };
   const regen = rec.regen;
   const uncoveredMust = kit.role.requirements.filter((r) => r.priority === 'must' && !kit.questions.some((q) => q.requirement_ids.includes(r.id)));
   const gaps = kit.research?.gaps ?? [];
@@ -79,13 +82,21 @@ export default function KitBuilder({ rec, kit, saving, error, onClearError, onEd
         </details>
       )}
 
-      <Tabs active={tab} onChange={setTab} counts={{ questions: kit.questions.length, flashcards: kit.flashcards.length, schedule: kit.schedule.days.length }} />
-      <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`} tabIndex={0} className={focusRing}>
-        {tab === 'overview' && <BriefSection kit={kit} regen={regen} onEdit={onEdit} onRegenerate={onRegenerate} />}
-        {tab === 'questions' && <QuestionsSection kit={kit} regen={regen} onEdit={onEdit} onRegenerate={onRegenerate} />}
-        {tab === 'flashcards' && <FlashcardsSection kit={kit} onEdit={onEdit} />}
-        {tab === 'schedule' && <ScheduleSection kit={kit} onEdit={onEdit} onRegenerate={onRegenerate} />}
-      </div>
+      <Tabs active={tab} onChange={select} counts={{ questions: kit.questions.length, flashcards: kit.flashcards.length, schedule: kit.schedule.days.length }} />
+      {tab !== 'practice' && (
+        <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`} tabIndex={0} className={focusRing}>
+          {tab === 'overview' && <BriefSection kit={kit} regen={regen} onEdit={onEdit} onRegenerate={onRegenerate} />}
+          {tab === 'questions' && <QuestionsSection kit={kit} regen={regen} onEdit={onEdit} onRegenerate={onRegenerate} />}
+          {tab === 'flashcards' && <FlashcardsSection kit={kit} onEdit={onEdit} />}
+          {tab === 'schedule' && <ScheduleSection kit={kit} onEdit={onEdit} onRegenerate={onRegenerate} />}
+        </div>
+      )}
+      {/* Mounted once opened and then only hidden, so a session in progress survives switching tabs. */}
+      {practiceOpened && (
+        <div role="tabpanel" id="panel-practice" aria-labelledby="tab-practice" tabIndex={0} hidden={tab !== 'practice'} className={focusRing}>
+          <PracticeSection kit={kit} kitId={rec.id} onGoToCards={() => select('flashcards')} />
+        </div>
+      )}
     </div>
   );
 }

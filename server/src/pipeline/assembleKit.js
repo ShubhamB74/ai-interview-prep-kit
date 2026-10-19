@@ -38,7 +38,7 @@ export function assembleKit({ jd, companyUrl, draft, questions, coverage, schedu
     },
     questions,
     flashcards,
-    schedule,
+    schedule: { ...schedule, starts_at: now().toISOString() },
     coverage,
     research: {
       gaps,

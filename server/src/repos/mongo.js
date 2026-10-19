@@ -18,6 +18,7 @@ const toKit = (d) =>
     attempt: d.attempt ?? 0,
     version: d.version ?? 0,
     regen: d.regen ?? null,
+    practice: d.practice ?? {},
     progress: d.progress ?? {},
     kit: d.kit,
     error: d.error,
@@ -110,6 +111,16 @@ export function createMongoRepos() {
       if (!validId(id)) return false;
       return (await KitModel.updateOne({ _id: id }, { $set: { regen } })).matchedCount === 1;
     },
+    // ---- practice progress (per card, compare-and-swap on the card's review count) ----
+    /** Write one card's state only if its review count is still `expectedReviews` (0 = never reviewed). */
+    async setPracticeCard(id, userId, cardId, expectedReviews, entry) {
+      if (!validId(id) || !/^[A-Za-z0-9_-]{1,40}$/.test(cardId)) return false;
+      const path = `practice.cards.${cardId}`;
+      const cond = expectedReviews === 0 ? { $or: [{ [path]: { $exists: false } }, { [`${path}.reviews`]: 0 }] } : { [`${path}.reviews`]: expectedReviews };
+      const r = await KitModel.updateOne({ _id: id, userId, status: 'ready', ...cond }, { $set: { [path]: entry } });
+      return r.matchedCount === 1;
+    },
+    resetPractice: async (id, userId) => validId(id) && (await KitModel.updateOne({ _id: id, userId }, { $set: { practice: {} } })).matchedCount === 1,
     /** failed -> pending for an owner-requested retry. */
     requeue: async (id, userId) => (validId(id)
       ? toKit(await KitModel.findOneAndUpdate({ _id: id, userId, status: 'failed' }, { $set: { status: 'pending', error: null, progress: {} } }, { new: true }))

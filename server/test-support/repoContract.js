@@ -156,4 +156,26 @@ export const kitRepoContract = [
     await repos.kits.setRegen(k.id, null);
     assert.equal((await repos.kits.findOwned(k.id, user.id)).regen, null);
   }],
+
+  ['practice: per-card compare-and-swap on the review count; ready kits and owners only; reset clears it', async (repos) => {
+    const { user, kits: [k] } = await seed(repos);
+    const entry = (n) => ({ box: 2, due: '2026-01-01T00:00:00.000Z', last_confidence: 3, reviews: n, recent: [3] });
+    assert.equal(await repos.kits.setPracticeCard(k.id, user.id, 'f1', 0, entry(1)), false, 'not ready');
+    await repos.kits.claim(k.id);
+    await repos.kits.finish(k.id, 1, { v: 1 });
+    assert.equal(await repos.kits.setPracticeCard(k.id, user.id, 'f1', 0, entry(1)), true);
+    assert.equal(await repos.kits.setPracticeCard(k.id, user.id, 'f1', 0, entry(9)), false, 'stale expectation loses');
+    assert.equal(await repos.kits.setPracticeCard(k.id, user.id, 'f1', 1, entry(2)), true);
+    assert.equal(await repos.kits.setPracticeCard(k.id, user.id, 'f2', 0, entry(1)), true, 'cards are independent');
+    assert.equal(await repos.kits.setPracticeCard(k.id, user.id, 'bad.id', 0, entry(1)), false, 'unsafe card ids are refused');
+    const other = await repos.users.create({ email: `o${Math.random()}@x.com`, passwordHash: 'h' });
+    assert.equal(await repos.kits.setPracticeCard(k.id, other.id, 'f3', 0, entry(1)), false, 'not the owner');
+    const [a, b] = await Promise.all([repos.kits.setPracticeCard(k.id, user.id, 'f2', 1, entry(2)), repos.kits.setPracticeCard(k.id, user.id, 'f2', 1, entry(2))]);
+    assert.equal([a, b].filter(Boolean).length, 1, 'exactly one concurrent review of the same card wins');
+    const cards = (await repos.kits.findOwned(k.id, user.id)).practice.cards;
+    assert.deepEqual([cards.f1.reviews, cards.f2.reviews, 'f3' in cards], [2, 2, false]);
+    assert.equal(await repos.kits.resetPractice(k.id, other.id), false);
+    assert.equal(await repos.kits.resetPractice(k.id, user.id), true);
+    assert.deepEqual((await repos.kits.findOwned(k.id, user.id)).practice ?? {}, {});
+  }],
 ];

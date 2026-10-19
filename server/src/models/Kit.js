@@ -24,6 +24,9 @@ const kitSchema = new mongoose.Schema(
     version: { type: Number, default: 0 },
     // At most one regeneration per kit at a time: { section, category?, status: 'running'|'failed', startedAt, error? } or null.
     regen: { type: mongoose.Schema.Types.Mixed, default: null },
+    // Practice progress, per flashcard id: { cards: { [cardId]: { box, due, last_confidence, reviews, ... } } }.
+    // Lives beside `kit`, not inside it, so reviewing never conflicts with editing (which compare-and-swaps `kit`).
+    practice: { type: mongoose.Schema.Types.Mixed, default: {} },
     // { [step]: { status, detail, seq, at } } -- latest state per step, so it never grows with retries.
     progress: { type: mongoose.Schema.Types.Mixed, default: {} },
     startedAt: Date,

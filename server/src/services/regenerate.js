@@ -124,6 +124,9 @@ export async function regenerateBrief({ kits, id, userId, llm, retrievalCtx, res
 /** Instant and deterministic. Starts from scratch (this is the explicit "rebuild the plan" action); optionally for a new number of days. */
 export function regenerateSchedule({ kits, id, userId, days }) {
   return applyToKit(kits, id, userId, (kit) => {
+    const changed = days !== undefined && days !== kit.schedule.days_available;
+    const startsAt = changed ? new Date().toISOString() : kit.schedule.starts_at; // a new day count starts counting from now
     kit.schedule = allocateSchedule({ questions: kit.questions, requirements: kit.role.requirements, daysAvailable: days ?? kit.schedule.days_available });
+    if (startsAt) kit.schedule.starts_at = startsAt;
   });
 }
