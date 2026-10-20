@@ -3,10 +3,11 @@ import { asyncHandler } from '../lib/asyncHandler.js';
 import { AppError } from '../lib/errors.js';
 import { inputHash, titleFromJd } from '../lib/inputHash.js';
 import { validateBody } from '../middleware/validate.js';
-import { opsBody, regenerateBody, reviewBody } from '../schema/ops.js';
+import { mockAttemptBody, opsBody, regenerateBody, reviewBody } from '../schema/ops.js';
 import { batchKitsBody, createKitBody } from '../schema/requests.js';
 import { applyOpsToKit } from '../services/kitEditor.js';
 import { regenerateSchedule } from '../services/regenerate.js';
+import { getMock, resetMock, saveMockAttempt } from '../services/mockInterview.js';
 import { getPractice, recordReview, resetPractice } from '../services/practice.js';
 
 const progressList = (progress) =>
@@ -115,6 +116,20 @@ export function kitsRouter({ kits }, { jobs, limits, regen }) {
 
   r.delete('/:id/practice', asyncHandler(async (req, res) => {
     await resetPractice(kits, req.params.id, req.userId);
+    res.status(204).end();
+  }));
+
+  // ---- mock interview: attempts are saved with server-computed scores; the report is derived ----
+  r.get('/:id/mock', asyncHandler(async (req, res) => {
+    res.json(await getMock(kits, req.params.id, req.userId));
+  }));
+
+  r.post('/:id/mock/attempts', validateBody(mockAttemptBody), asyncHandler(async (req, res) => {
+    res.status(201).json(await saveMockAttempt(kits, req.params.id, req.userId, req.body));
+  }));
+
+  r.delete('/:id/mock', asyncHandler(async (req, res) => {
+    await resetMock(kits, req.params.id, req.userId);
     res.status(204).end();
   }));
 

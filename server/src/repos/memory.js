@@ -7,7 +7,7 @@ export function createMemoryRepos() {
   const K = new Map();
   const uid = () => crypto.randomBytes(12).toString('hex');
   const touch = (k) => { k.updatedAt = new Date(); return k; };
-  const copy = (k) => k && { ...k, progress: { ...k.progress }, practice: structuredClone(k.practice ?? {}), kit: k.kit ? structuredClone(k.kit) : k.kit };
+  const copy = (k) => k && { ...k, progress: { ...k.progress }, practice: structuredClone(k.practice ?? {}), mock: structuredClone(k.mock ?? []), kit: k.kit ? structuredClone(k.kit) : k.kit };
   const progressKey = (step) => String(step).replace(/[.$]/g, '_');
 
   const users = {
@@ -28,7 +28,7 @@ export function createMemoryRepos() {
       const existing = await kits.findByHash(data.userId, data.inputHash);
       if (existing) return existing;
       const now = new Date();
-      const k = { id: uid(), status: 'pending', attempt: 0, version: 0, regen: null, practice: {}, progress: {}, kit: null, error: null, startedAt: null, heartbeatAt: null, finishedAt: null, createdAt: now, updatedAt: now, ...data };
+      const k = { id: uid(), status: 'pending', attempt: 0, version: 0, regen: null, practice: {}, mock: [], progress: {}, kit: null, error: null, startedAt: null, heartbeatAt: null, finishedAt: null, createdAt: now, updatedAt: now, ...data };
       K.set(k.id, k);
       return copy(k);
     },
@@ -98,6 +98,19 @@ export function createMemoryRepos() {
       if ((k.practice?.cards?.[cardId]?.reviews ?? 0) !== expectedReviews) return false;
       k.practice = { ...k.practice, cards: { ...k.practice?.cards, [cardId]: structuredClone(entry) } };
       touch(k);
+      return true;
+    },
+    async addMockAttempt(id, userId, attempt) {
+      const k = K.get(id);
+      if (!k || k.userId !== userId || k.status !== 'ready') return false;
+      k.mock = [structuredClone(attempt), ...(k.mock ?? [])].slice(0, 10);
+      touch(k);
+      return true;
+    },
+    async resetMock(id, userId) {
+      const k = K.get(id);
+      if (!k || k.userId !== userId) return false;
+      k.mock = [];
       return true;
     },
     async resetPractice(id, userId) {

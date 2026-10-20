@@ -2,12 +2,13 @@
 import { useRef, useState } from 'react';
 import BriefSection from './BriefSection';
 import FlashcardsSection from './FlashcardsSection';
+import MockInterviewSection from './MockInterviewSection';
 import PracticeSection from './PracticeSection';
 import QuestionsSection from './QuestionsSection';
 import ScheduleSection from './ScheduleSection';
 import { Btn, CATEGORY_LABEL, focusRing } from './ui';
 
-const TABS = [['overview', 'Overview'], ['questions', 'Questions'], ['flashcards', 'Flashcards'], ['practice', 'Practice'], ['schedule', 'Schedule']];
+const TABS = [['overview', 'Overview'], ['questions', 'Questions'], ['flashcards', 'Flashcards'], ['practice', 'Practice'], ['mock', 'Mock interview'], ['schedule', 'Schedule']];
 
 /** Roving-tabindex tablist: Left/Right/Home/End move between tabs, as screen-reader users expect. */
 function Tabs({ active, onChange, counts }) {
@@ -37,8 +38,9 @@ function Tabs({ active, onChange, counts }) {
 
 export default function KitBuilder({ rec, kit, saving, error, onClearError, onEdit, onRegenerate }) {
   const [tab, setTab] = useState('overview');
-  const [practiceOpened, setPracticeOpened] = useState(false);
-  const select = (key) => { if (key === 'practice') setPracticeOpened(true); setTab(key); };
+  const [opened, setOpened] = useState([]); // interactive tabs stay mounted (hidden) once opened, so a run in progress survives switching tabs
+  const select = (key) => { if (['practice', 'mock'].includes(key)) setOpened((o) => (o.includes(key) ? o : [...o, key])); setTab(key); };
+  const INTERACTIVE = ['practice', 'mock'];
   const regen = rec.regen;
   const uncoveredMust = kit.role.requirements.filter((r) => r.priority === 'must' && !kit.questions.some((q) => q.requirement_ids.includes(r.id)));
   const gaps = kit.research?.gaps ?? [];
@@ -83,7 +85,7 @@ export default function KitBuilder({ rec, kit, saving, error, onClearError, onEd
       )}
 
       <Tabs active={tab} onChange={select} counts={{ questions: kit.questions.length, flashcards: kit.flashcards.length, schedule: kit.schedule.days.length }} />
-      {tab !== 'practice' && (
+      {!INTERACTIVE.includes(tab) && (
         <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`} tabIndex={0} className={focusRing}>
           {tab === 'overview' && <BriefSection kit={kit} regen={regen} onEdit={onEdit} onRegenerate={onRegenerate} />}
           {tab === 'questions' && <QuestionsSection kit={kit} regen={regen} onEdit={onEdit} onRegenerate={onRegenerate} />}
@@ -92,9 +94,14 @@ export default function KitBuilder({ rec, kit, saving, error, onClearError, onEd
         </div>
       )}
       {/* Mounted once opened and then only hidden, so a session in progress survives switching tabs. */}
-      {practiceOpened && (
+      {opened.includes('practice') && (
         <div role="tabpanel" id="panel-practice" aria-labelledby="tab-practice" tabIndex={0} hidden={tab !== 'practice'} className={focusRing}>
           <PracticeSection kit={kit} kitId={rec.id} onGoToCards={() => select('flashcards')} />
+        </div>
+      )}
+      {opened.includes('mock') && (
+        <div role="tabpanel" id="panel-mock" aria-labelledby="tab-mock" tabIndex={0} hidden={tab !== 'mock'} className={focusRing}>
+          <MockInterviewSection kit={kit} kitId={rec.id} />
         </div>
       )}
     </div>

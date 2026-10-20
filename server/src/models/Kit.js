@@ -27,6 +27,8 @@ const kitSchema = new mongoose.Schema(
     // Practice progress, per flashcard id: { cards: { [cardId]: { box, due, last_confidence, reviews, ... } } }.
     // Lives beside `kit`, not inside it, so reviewing never conflicts with editing (which compare-and-swaps `kit`).
     practice: { type: mongoose.Schema.Types.Mixed, default: {} },
+    // Mock interview attempts, newest first, capped at 10 (written with an atomic $push + $slice).
+    mock: { type: [mongoose.Schema.Types.Mixed], default: [] },
     // { [step]: { status, detail, seq, at } } -- latest state per step, so it never grows with retries.
     progress: { type: mongoose.Schema.Types.Mixed, default: {} },
     startedAt: Date,

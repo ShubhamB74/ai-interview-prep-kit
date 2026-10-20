@@ -178,4 +178,20 @@ export const kitRepoContract = [
     assert.equal(await repos.kits.resetPractice(k.id, user.id), true);
     assert.deepEqual((await repos.kits.findOwned(k.id, user.id)).practice ?? {}, {});
   }],
+
+  ['mock attempts: newest first, capped at 10, ready kits and owners only; reset clears', async (repos) => {
+    const { user, kits: [k] } = await seed(repos);
+    assert.equal(await repos.kits.addMockAttempt(k.id, user.id, { id: 'm-0' }), false, 'not ready');
+    await repos.kits.claim(k.id);
+    await repos.kits.finish(k.id, 1, { v: 1 });
+    const other = await repos.users.create({ email: `o${Math.random()}@x.com`, passwordHash: 'h' });
+    assert.equal(await repos.kits.addMockAttempt(k.id, other.id, { id: 'm-x' }), false, 'not the owner');
+    await Promise.all(Array.from({ length: 12 }, (_, i) => repos.kits.addMockAttempt(k.id, user.id, { id: `m-${i}` })));
+    const mock = (await repos.kits.findOwned(k.id, user.id)).mock;
+    assert.equal(mock.length, 10, 'only the latest 10 are kept');
+    assert.equal(new Set(mock.map((m) => m.id)).size, 10, 'concurrent saves do not lose or duplicate each other');
+    assert.equal(await repos.kits.resetMock(k.id, other.id), false);
+    assert.equal(await repos.kits.resetMock(k.id, user.id), true);
+    assert.deepEqual((await repos.kits.findOwned(k.id, user.id)).mock, []);
+  }],
 ];

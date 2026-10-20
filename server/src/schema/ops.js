@@ -61,3 +61,17 @@ export const reviewBody = z.object({
   confidence: z.number().int().min(1).max(3),
   review_id: z.string().regex(/^[A-Za-z0-9_-]{6,40}$/).optional(),
 });
+
+const ROUND_ID = z.enum(['screen', 'technical', 'system-design', 'behavioural', 'company-fit']);
+const itemId = z.string().min(1).max(40);
+
+/** A finished (or ended-early) mock interview. Scores are NOT accepted: the server recomputes them from the ticked checklist. */
+export const mockAttemptBody = z.object({
+  completed: z.boolean(),
+  basis: z.enum(['published', 'reported', 'default']).optional(),
+  rounds: z.array(z.object({ id: ROUND_ID, question_ids: z.array(itemId).max(10) })).max(5),
+  answers: z.array(z.object({
+    question_id: itemId, round_id: ROUND_ID, answer_text: z.string().max(4000),
+    covered: z.array(z.boolean()).max(8), seconds: z.number().int().min(0).max(3600), skipped: z.boolean(),
+  })).min(1).max(30),
+});

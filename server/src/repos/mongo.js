@@ -19,6 +19,7 @@ const toKit = (d) =>
     version: d.version ?? 0,
     regen: d.regen ?? null,
     practice: d.practice ?? {},
+    mock: d.mock ?? [],
     progress: d.progress ?? {},
     kit: d.kit,
     error: d.error,
@@ -120,6 +121,10 @@ export function createMongoRepos() {
       const r = await KitModel.updateOne({ _id: id, userId, status: 'ready', ...cond }, { $set: { [path]: entry } });
       return r.matchedCount === 1;
     },
+    /** Prepend an attempt (newest first), keeping the latest 10. Atomic: concurrent saves never lose each other. */
+    addMockAttempt: async (id, userId, attempt) => validId(id)
+      && (await KitModel.updateOne({ _id: id, userId, status: 'ready' }, { $push: { mock: { $each: [attempt], $position: 0, $slice: 10 } } })).matchedCount === 1,
+    resetMock: async (id, userId) => validId(id) && (await KitModel.updateOne({ _id: id, userId }, { $set: { mock: [] } })).matchedCount === 1,
     resetPractice: async (id, userId) => validId(id) && (await KitModel.updateOne({ _id: id, userId }, { $set: { practice: {} } })).matchedCount === 1,
     /** failed -> pending for an owner-requested retry. */
     requeue: async (id, userId) => (validId(id)

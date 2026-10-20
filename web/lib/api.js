@@ -1,4 +1,6 @@
-const BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+// Development talks to the API on :4000 directly. In production the default is "same origin": next.config.js proxies /api/*
+// to the backend (API_URL), so the session cookie is first-party and works in browsers that block third-party cookies.
+const BASE = process.env.NEXT_PUBLIC_API_URL ?? (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:4000');
 
 /** Thin fetch wrapper. Server errors arrive as { error: { code, message } }. */
 export async function api(path, { method = 'GET', body } = {}) {
