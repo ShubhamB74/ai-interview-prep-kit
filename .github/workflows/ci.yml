@@ -1,0 +1,20 @@
+name: ci
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - name: Server tests (schedule, coverage, structure, jobs, builder, practice, mock)
+        run: npm test
+      - name: UI tests (builder, practice, mock interview)
+        run: npm run test:web
+      - name: Web build
+        run: npm run build -w web
+      - name: Batch command runs from a clean clone (no API key: every case is recorded as failed, the run still completes)
+        run: |
+          npm run evaluate -- --input fixtures/cases.sample.json --output /tmp/kits.json
+          node -e "const o=require('/tmp/kits.json'); if(o.version!=='1.0'||o.kits.length!==3) process.exit(1)"

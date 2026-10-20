@@ -1,0 +1,26 @@
+# Render blueprint for the API (free tier). The web app deploys separately (see docs/DEPLOYMENT.md).
+services:
+  - type: web
+    name: prepkit-api
+    runtime: node
+    plan: free
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production
+      - key: MONGODB_URI          # MongoDB Atlas connection string (free M0 cluster)
+        sync: false
+      - key: SESSION_SECRET       # signs session cookies; generated once by Render
+        generateValue: true
+      - key: WEB_ORIGIN           # the web app's public URL, e.g. https://prepkit.vercel.app (no trailing slash)
+        sync: false
+      - key: LLM_PROVIDER
+        value: gemini
+      - key: LLM_API_KEY          # your provider key; never committed
+        sync: false
+      - key: JOB_CONCURRENCY
+        value: "1"
